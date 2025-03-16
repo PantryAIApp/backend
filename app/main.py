@@ -108,7 +108,7 @@ async def create_user(user: UserEmailAndPassword):
         return {"user": user}
     except Exception as e:
         raise HTTPException(status_code=500, 
-                            detail="Server error" + str(e))
+                            detail="Server error " + str(e))
 
 @app.post('/login')
 async def login(user: UserEmailAndPassword): 
@@ -123,4 +123,4 @@ async def login(user: UserEmailAndPassword):
         return {"output": output.json()}
     except Exception as e:
         raise HTTPException(status_code=500, 
-                            detail="Server error" + str(e))
+                            detail="Server error " + str(e))
