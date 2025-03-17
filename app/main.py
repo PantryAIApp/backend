@@ -1,4 +1,4 @@
-from typing import Annotated, Optional
+from typing import Annotated, Optional, List
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from firebase_admin import auth, credentials, firestore
@@ -6,7 +6,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import firebase_admin
 import os
 from dotenv import dotenv_values
-from app.models import UserEmailAndPassword
+from app.models import UserEmailAndPassword, Recipe
 import requests
 
 
@@ -124,3 +124,96 @@ async def login(user: UserEmailAndPassword):
     except Exception as e:
         raise HTTPException(status_code=500, 
                             detail="Server error " + str(e))
+    
+@app.post("/recipes", response_model=Recipe)
+async def create_recipe(
+    recipe: Recipe, 
+    user: dict = Depends(get_firebase_user_from_token)
+):
+
+    recipe.created_by = user.get("uid")
+    
+    doc_ref = db.collection("recipes").document()
+    recipe.id = doc_ref.id  
+    doc_ref.set(recipe.model_dump())
+    return recipe
+
+@app.get("/recipes/{recipe_id}", response_model=Recipe)
+async def get_recipe(
+    recipe_id: str, 
+    user: dict = Depends(get_firebase_user_from_token)
+):
+    doc_ref = db.collection("recipes").document(recipe_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Recipe not found"
+        )
+    recipe_data = doc.to_dict()
+
+    if recipe_data.get("created_by") != user.get("uid"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Not authorized to view this recipe"
+        )
+    
+    return Recipe(**recipe_data)
+
+@app.put("/recipes/{recipe_id}", response_model=Recipe)
+async def update_recipe(
+    recipe_id: str, 
+    recipe: Recipe,
+    user: dict = Depends(get_firebase_user_from_token)
+):
+    doc_ref = db.collection("recipes").document(recipe_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Recipe not found"
+        )
+    
+    existing_recipe = doc.to_dict()
+    if existing_recipe.get("created_by") != user.get("uid"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Not authorized to update this recipe"
+        )
+    
+    update_data = recipe.model_dump(exclude_unset=True)
+    update_data.pop("created_by", None)
+    
+    doc_ref.update(update_data)
+
+    updated_doc = doc_ref.get().to_dict()
+    return Recipe(**updated_doc)
+
+@app.delete("/recipes/{recipe_id}")
+async def delete_recipe(
+    recipe_id: str,
+    user: dict = Depends(get_firebase_user_from_token)
+):
+    doc_ref = db.collection("recipes").document(recipe_id)
+    doc = doc_ref.get()
+    if not doc.exists:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Recipe not found"
+        )
+    recipe_data = doc.to_dict()
+    if recipe_data.get("created_by") != user.get("uid"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Not authorized to delete this recipe"
+        )
+    doc_ref.delete()
+    return {"detail": "Recipe deleted successfully"}
+
+@app.get("/recipes", response_model=List[Recipe])
+async def list_recipes(user: dict = Depends(get_firebase_user_from_token)):
+    recipes_ref = db.collection("recipes").where("created_by", "==", user.get("uid")).stream()
+    recipes = []
+    for doc in recipes_ref:
+        recipes.append(Recipe(**doc.to_dict()))
+    return recipes
