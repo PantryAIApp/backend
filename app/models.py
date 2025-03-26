@@ -12,6 +12,6 @@ class Recipe(BaseModel):
     ingredients: List[str]
     instructions: List[str]
     image_url: Optional[str] = None
-    time_required: Optional[int]  
-    difficulty: Optional[str]  
-    created_by: Optional[str]
+    time_required: Optional[int] = None 
+    difficulty: Optional[str] = None
+    created_by: Optional[str] = None
