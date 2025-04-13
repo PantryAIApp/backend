@@ -8,12 +8,12 @@ import os
 from dotenv import dotenv_values
 from app.models import UserEmailAndPassword, Recipe
 import requests
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_vertexai import ChatVertexAI
 from langchain_core.messages import HumanMessage
 from langchain.chains import LLMChain
 from langchain.prompts import ChatPromptTemplate
 from langchain.output_parsers import PydanticOutputParser
-from langchain_core.pydantic_v1 import BaseModel, Field
+from pydantic import BaseModel, Field
 import base64
 import io
 from PIL import Image
@@ -43,7 +43,7 @@ config = dotenv_values(".env") # for local
 # config = dotenv_values("/app/.env") # for prod
 
 FIREBASE_API_KEY = config.get("FIREBASE_API_KEY", "")
-GOOGLE_API_KEY = config.get("GOOGLE_API_KEY", "")
+# GOOGLE_API_KEY = config.get("GOOGLE_API_KEY", "")
 
 default_app = firebase_admin.initialize_app(cred)
 
@@ -229,7 +229,7 @@ async def list_recipes(user: dict = Depends(get_firebase_user_from_token)):
 
 
 # Add this to your environment variables section
-GOOGLE_API_KEY = config.get("GOOGLE_API_KEY", "")
+# GOOGLE_API_KEY = config.get("GOOGLE_API_KEY", "")
 
 # Define the output structure using Pydantic
 class IngredientList(BaseModel):
@@ -267,10 +267,14 @@ INGREDIENT_PROMPT = ChatPromptTemplate.from_messages([
     {few_shot_examples}
     
     {format_instructions}"""),
+    (
+        "human",
+        "Identify the ingredients in the image."  # This message will populate the required text field.
+    ),
     ("human", [
         {
             "type": "image_url",
-            "image_url": {"url": "data:image/{image_type};base64,{image_data}"}
+            "image_url": {"url": "data:{image_type};base64,{image_data}"}
         }
     ])
 ])
@@ -291,12 +295,14 @@ async def extract_ingredients(
         image_pil.save(buffered, format=image_pil.format)
         img_str = base64.b64encode(buffered.getvalue()).decode()
         
-        model = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
-            temperature=0.1,
-            google_api_key=GOOGLE_API_KEY,
-            convert_system_message_to_human=True
-        )
+        model = ChatVertexAI(
+            model="gemini-2.0-flash",
+            # model="gemini-2.0-flash",
+            # text="Identify the ingredients in the image",
+            # temperature=0.1,
+            # google_api_key=GOOGLE_API_KEY,
+            # convert_system_message_to_human=True
+        ) 
         
         chain = INGREDIENT_PROMPT | model | parser
         
