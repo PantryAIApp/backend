@@ -10,6 +10,6 @@ If you want to run and get it working with the mobile app, do fastapi run app/ma
 7. When you are done, Ctrl+c and then type deactivate to deactivate the venv. 
 
 # Basic setup to host on Google Cloud run 
-1. Make sure that the two for prod lines are uncommented and the two local dev lines are commented out in main.py (change this back when committing)
+1. Make sure that the two for prod lines are uncommented and the two local dev lines are commented out in main.py (change this back when committing) (might need to do this: gcloud config set project pantry-ai-db083)
 2. gcloud builds submit --tag gcr.io/pantry-ai-db083/backend
-3. gcloud run deploy --image gcr.io/pantry-ai-db083/backend-new --platform managed --allow-unauthenticated --execution-environment gen1 --max-instances 5 --cpu 1 --memory 1Gi         (specs can be changed as needed). **Do not set min-instances and especially don't set it to something >0 for the time being!**      
+3. gcloud run deploy --image gcr.io/pantry-ai-db083/backend --platform managed --allow-unauthenticated --execution-environment gen1 --max-instances 5 --cpu 1 --memory 1Gi         (specs can be changed as needed). **Do not set min-instances and especially don't set it to something >0 for the time being!**      
