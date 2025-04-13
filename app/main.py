@@ -31,16 +31,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# cred = credentials.Certificate("/app/service-account.json") # for prod
-cred = credentials.Certificate("./service-account.json") # for local development
+cred = credentials.Certificate("/app/service-account.json") # for prod
+# cred = credentials.Certificate("./service-account.json") # for local development
 
 # This part might be needed
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./service-account.json" # for local dev
-# os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/app/service-account.json" # for prod
+# os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./service-account.json" # for local dev
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/app/service-account.json" # for prod
 
 
-config = dotenv_values(".env") # for local
-# config = dotenv_values("/app/.env") # for prod
+# config = dotenv_values(".env") # for local
+config = dotenv_values("/app/.env") # for prod
 
 FIREBASE_API_KEY = config.get("FIREBASE_API_KEY", "")
 # GOOGLE_API_KEY = config.get("GOOGLE_API_KEY", "")
