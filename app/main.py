@@ -296,12 +296,7 @@ async def extract_ingredients(
         img_str = base64.b64encode(buffered.getvalue()).decode()
         
         model = ChatVertexAI(
-            model="gemini-2.0-flash",
-            # model="gemini-2.0-flash",
-            # text="Identify the ingredients in the image",
-            # temperature=0.1,
-            # google_api_key=GOOGLE_API_KEY,
-            # convert_system_message_to_human=True
+            model="gemini-2.0-flash"
         ) 
         
         chain = INGREDIENT_PROMPT | model | parser
@@ -319,4 +314,100 @@ async def extract_ingredients(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error processing image: {str(e)}"
+        )
+
+
+# Define the output structure using Pydantic
+class RecipeOutput(BaseModel):
+    ingredients: List[str] = Field(description="List of ingredients for the recipe")
+    steps: List[str] = Field(description="List of steps to prepare the recipe")
+    summary: str = Field(description="Short summary of the recipe")
+
+# Create the output parser
+recipe_parser = PydanticOutputParser(pydantic_object=RecipeOutput)
+
+RECIPE_PROMPT = ChatPromptTemplate.from_messages([
+    (
+        "system",
+        """You are a master chef. Your task is to create an original, easy-to-follow recipe based on the provided ingredients.
+        Follow these rules:
+        1. Use all the ingredients provided.
+        2. Provide clear and concise steps.
+        3. Ensure the recipe is easy to follow.
+        4. Return the output in JSON format with 'ingredients' and 'steps' keys.
+        {format_instructions}"""
+        
+    ),
+    (
+        "human",
+        """
+        Now, please generate a recipe for the given ingredients: {ingredients}"""
+    )
+])
+
+# Define a Pydantic model for the request body
+class IngredientsRequest(BaseModel):
+    ingredients: List[str]
+
+# Configure logging
+
+@app.post("/generate-recipe")
+async def generate_recipe(request: IngredientsRequest):
+    """
+    Generate a recipe from a list of ingredients using LangChain and Gemini
+    """
+    try:
+        # Log the ingredients received
+
+        if not request.ingredients:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Ingredients list cannot be empty"
+            )
+
+        # Initialize the Gemini model
+        model = ChatVertexAI(
+            model="gemini-2.0-flash",
+            # model="gemini-2.0-flash",
+            # text="Identify the ingredients in the image",
+            # temperature=0.1,
+            # google_api_key=GOOGLE_API_KEY,
+            # convert_system_message_to_human=True
+        ) 
+        
+        # Create the chain
+        chain = RECIPE_PROMPT | model | recipe_parser
+       
+        # Prepare the input for the LLM
+        input_data = {
+            "format_instructions": recipe_parser.get_format_instructions(),
+            "ingredients": ", ".join(request.ingredients) # Ensure this matches the expected variable name
+              # Add format instructions
+        }
+        # # Log the input data
+        # print(input_data)
+        # print(input_data['format_instructions']);
+        print("invoking prompt")
+        print(RECIPE_PROMPT.invoke(input_data))
+        
+        
+        # Run the chain
+        raw_result = chain.invoke(input_data)
+
+        # Log the raw result
+        # Check if the result is empty
+        if not raw_result:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Received empty response from LLM"
+            )
+
+        # Parse the result
+        return raw_result.dict()
+        
+    except Exception as e:
+        # Log the error with traceback
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating recipe: {str(e)}"
         )
