@@ -321,6 +321,7 @@ async def extract_ingredients(
 class RecipeOutput(BaseModel):
     ingredients: List[str] = Field(description="List of ingredients for the recipe")
     steps: List[str] = Field(description="List of steps to prepare the recipe")
+    summary: str = Field(description="Short summary of the recipe")
 
 # Create the output parser
 recipe_parser = PydanticOutputParser(pydantic_object=RecipeOutput)
@@ -334,34 +335,13 @@ RECIPE_PROMPT = ChatPromptTemplate.from_messages([
         2. Provide clear and concise steps.
         3. Ensure the recipe is easy to follow.
         4. Return the output in JSON format with 'ingredients' and 'steps' keys.
-        
-        
-        Please generate a recipe in the following JSON format:
-        {
-            "ingredients": ["list of ingredients"],
-            "steps": ["step 1", "step 2", "step 3"]
-        }
-
-        Example 1:
-        Ingredients: ["2 strawberries", "3 pomegranates", "2 cups water"]
-        Output: {
-            "ingredients": ["2 strawberries", "3 pomegranates", "2 cups water"],
-            "steps": ["Mix the strawberries and pomegranates", "Add water and stir"]
-        }
-
-        Example 2:
-        Ingredients: ["1 apple", "1 banana", "1 cup yogurt"]
-        Output: {
-            "ingredients": ["1 apple", "1 banana", "1 cup yogurt"],
-            "steps": ["Chop the apple and banana", "Mix with yogurt"]
-        }
         {format_instructions}"""
+        
     ),
     (
         "human",
         """
-        Now, please generate a recipe for the given ingredients.
-        Ingredients: {ingredients}"""
+        Now, please generate a recipe for the given ingredients: {ingredients}"""
     )
 ])
 
@@ -397,16 +377,20 @@ async def generate_recipe(request: IngredientsRequest):
         
         # Create the chain
         chain = RECIPE_PROMPT | model | recipe_parser
-        print(request.ingredients)
+       
         # Prepare the input for the LLM
         input_data = {
             "format_instructions": recipe_parser.get_format_instructions(),
             "ingredients": ", ".join(request.ingredients) # Ensure this matches the expected variable name
               # Add format instructions
         }
+        # # Log the input data
+        # print(input_data)
+        # print(input_data['format_instructions']);
+        print("invoking prompt")
+        print(RECIPE_PROMPT.invoke(input_data))
         
-        # Log the input data
-        print(input_data)
+        
         # Run the chain
         raw_result = chain.invoke(input_data)
 
