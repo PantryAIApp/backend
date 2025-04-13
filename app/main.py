@@ -1,5 +1,5 @@
 from typing import Annotated, Optional, List
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status,File,UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from firebase_admin import auth, credentials, firestore
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -8,7 +8,15 @@ import os
 from dotenv import dotenv_values
 from app.models import UserEmailAndPassword, Recipe
 import requests
-
+from langchain_google_vertexai import ChatVertexAI
+from langchain_core.messages import HumanMessage
+from langchain.chains import LLMChain
+from langchain.prompts import ChatPromptTemplate
+from langchain.output_parsers import PydanticOutputParser
+from pydantic import BaseModel, Field
+import base64
+import io
+from PIL import Image
 
 
 app = FastAPI()
@@ -23,18 +31,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# cred = credentials.Certificate("/app/service-account.json") # for prod
-cred = credentials.Certificate("./service-account.json") # for local development
+cred = credentials.Certificate("/app/service-account.json") # for prod
+# cred = credentials.Certificate("./service-account.json") # for local development
 
 # This part might be needed
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./service-account.json" # for local dev
-# os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/app/service-account.json" # for prod
+# os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "./service-account.json" # for local dev
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "/app/service-account.json" # for prod
 
 
-config = dotenv_values(".env") # for local
-# config = dotenv_values("/app/.env") # for prod
+# config = dotenv_values(".env") # for local
+config = dotenv_values("/app/.env") # for prod
 
 FIREBASE_API_KEY = config.get("FIREBASE_API_KEY", "")
+# GOOGLE_API_KEY = config.get("GOOGLE_API_KEY", "")
 
 default_app = firebase_admin.initialize_app(cred)
 
@@ -217,3 +226,97 @@ async def list_recipes(user: dict = Depends(get_firebase_user_from_token)):
     for doc in recipes_ref:
         recipes.append(Recipe(**doc.to_dict()))
     return recipes
+
+
+# Add this to your environment variables section
+# GOOGLE_API_KEY = config.get("GOOGLE_API_KEY", "")
+
+# Define the output structure using Pydantic
+class IngredientList(BaseModel):
+    ingredients: list[str] = Field(description="List of ingredients identified in the image")
+
+# Create the output parser
+parser = PydanticOutputParser(pydantic_object=IngredientList)
+
+# Define few-shot examples
+FEW_SHOT_EXAMPLES = """
+Example 1:
+Image: A bowl of pasta with tomatoes, basil, and cheese
+Output: {"ingredients": ["pasta", "tomatoes", "basil", "cheese"]}
+
+Example 2:
+Image: A plate with grilled chicken, rice, and steamed vegetables
+Output: {"ingredients": ["chicken", "rice", "broccoli", "carrots"]}
+
+Example 3:
+Image: A fruit salad with apples, bananas, and grapes
+Output: {"ingredients": ["apples", "bananas", "grapes"]}
+"""
+
+# Create the prompt template with few-shot examples
+INGREDIENT_PROMPT = ChatPromptTemplate.from_messages([
+    ("system", """You are an expert chef analyzing food images. Your task is to identify all ingredients in the image.
+    Follow these rules:
+    1. List only ingredients you can see with high confidence
+    2. Use common names for ingredients
+    3. Don't include quantities or measurements
+    4. Don't include preparation instructions
+    5. Return the output in JSON format as shown in the examples
+    
+    Examples:
+    {few_shot_examples}
+    
+    {format_instructions}"""),
+    (
+        "human",
+        "Identify the ingredients in the image."  # This message will populate the required text field.
+    ),
+    ("human", [
+        {
+            "type": "image_url",
+            "image_url": {"url": "data:{image_type};base64,{image_data}"}
+        }
+    ])
+])
+
+@app.post("/extract-ingredients")
+async def extract_ingredients(
+    image: UploadFile = File(...),
+    user: dict = Depends(get_firebase_user_from_token)
+):
+    """
+    Extract ingredients from an uploaded image using LangChain and Gemini
+    """
+    try:
+        contents = await image.read()
+        image_pil = Image.open(io.BytesIO(contents))
+        
+        buffered = io.BytesIO()
+        image_pil.save(buffered, format=image_pil.format)
+        img_str = base64.b64encode(buffered.getvalue()).decode()
+        
+        model = ChatVertexAI(
+            model="gemini-2.0-flash",
+            # model="gemini-2.0-flash",
+            # text="Identify the ingredients in the image",
+            # temperature=0.1,
+            # google_api_key=GOOGLE_API_KEY,
+            # convert_system_message_to_human=True
+        ) 
+        
+        chain = INGREDIENT_PROMPT | model | parser
+        
+        result = chain.invoke({
+            "few_shot_examples": FEW_SHOT_EXAMPLES,
+            "format_instructions": parser.get_format_instructions(),
+            "image_type": image.content_type,
+            "image_data": img_str
+        })
+        
+        return result.dict()
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing image: {str(e)}"
+        )
