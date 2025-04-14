@@ -322,6 +322,7 @@ class RecipeOutput(BaseModel):
     ingredients: List[str] = Field(description="List of ingredients for the recipe")
     steps: List[str] = Field(description="List of steps to prepare the recipe")
     summary: str = Field(description="Short summary of the recipe")
+    name: str = Field(description="Name of the recipe")
 
 # Create the output parser
 recipe_parser = PydanticOutputParser(pydantic_object=RecipeOutput)
