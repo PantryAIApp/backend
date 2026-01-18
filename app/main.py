@@ -296,7 +296,9 @@ async def extract_ingredients(
         img_str = base64.b64encode(buffered.getvalue()).decode()
         
         model = ChatVertexAI(
-            model="gemini-2.0-flash"
+            model="gemini-2.5-flash",
+            project=config['GCP_PROJECT'],
+            location=config['GCP_LOCATION'],
         ) 
         
         chain = INGREDIENT_PROMPT | model | parser
@@ -332,7 +334,7 @@ RECIPE_PROMPT = ChatPromptTemplate.from_messages([
         "system",
         """You are a master chef. Your task is to create an original, easy-to-follow recipe based on the provided ingredients.
         Follow these rules:
-        1. Use all the ingredients provided.
+        1. Use only the ingredients that make sense to create a cohesive dish. If an ingredient seems out of place, omit it.
         2. Provide clear and concise steps.
         3. Ensure the recipe is easy to follow.
         4. Return the output in JSON format with 'ingredients' and 'steps' keys.
@@ -368,12 +370,9 @@ async def generate_recipe(request: IngredientsRequest):
 
         # Initialize the Gemini model
         model = ChatVertexAI(
-            model="gemini-2.0-flash",
-            # model="gemini-2.0-flash",
-            # text="Identify the ingredients in the image",
-            # temperature=0.1,
-            # google_api_key=GOOGLE_API_KEY,
-            # convert_system_message_to_human=True
+            model="gemini-2.5-flash",
+            project=config['GCP_PROJECT'],
+            location=config['GCP_LOCATION'],
         ) 
         
         # Create the chain
